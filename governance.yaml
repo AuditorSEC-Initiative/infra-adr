@@ -1,0 +1,70 @@
+# AuditorSEC Governance Master — AI Chatbot Policy
+# Phase: UHIP-2A/ADR | ADR-0011 | NIS2 Art.21.2a/d/j/k
+# Last updated: 2026-04-23
+# Enforcement: Woodpecker CI lint + ArgoCD sync
+
+apiVersion: governance/v1
+kind: AIChatbotPolicy
+metadata:
+  name: governance-master
+  org: AuditorSEC-Initiative
+  phase: UHIP-2A
+  adr: ADR-0011
+  nis2_articles: ["Art.21.2a", "Art.21.2d", "Art.21.2j", "Art.21.2k"]
+
+aiChatbots:
+  grok:
+    status: PROHIBITED
+    vendor: xAI (Elon Musk / X Corp)
+    reason: >
+      NIS2 Art.21.2a (risk management), Art.21.2d (supply chain),
+      Art.21.2j (human resources security), Art.21.2k (cryptography).
+      Data residency outside EU/UA jurisdiction. No DPA available.
+      Post-quantum cryptography not confirmed. GDPR Art.46 transfer
+      safeguards absent. BRAVE1 security clearance incompatible.
+    enforcement: BLOCK at network perimeter (Woodpecker + ArgoCD)
+    adr_ref: ADR-0011
+
+  chatgpt:
+    status: RESTRICTED
+    vendor: OpenAI
+    reason: >
+      Permitted only for non-sensitive public tasks. No classified
+      or PII data. Requires DPA review per NIS2 Art.21.2d.
+    enforcement: AUDIT_LOG via n8n + S3 immutable
+    adr_ref: ADR-0011
+
+  perplexity:
+    status: ALLOWED
+    vendor: Perplexity AI
+    reason: >
+      EU-aligned data processing. GDPR DPA in place.
+      Approved for UHIP-2A research and automation tasks.
+      No classified data. Audit trail maintained.
+    enforcement: MONITOR via n8n dorks + Grafana
+    adr_ref: ADR-0011
+
+  ollama:
+    status: ALLOWED_PREFERRED
+    vendor: Self-hosted (AuditorSEC infra)
+    model: mistral-nemo:pq
+    deployment: K8s namespace ollama-system
+    reason: >
+      On-premise post-quantum deployment. Full data sovereignty.
+      NIS2 Art.21.2k compliant (PQ cryptography). BRAVE1 compatible.
+      Primary AI for sensitive/classified workflows.
+    enforcement: ArgoCD + Vault encrypt + Prometheus monitor
+    adr_ref: ADR-0011
+
+compliance:
+  framework: NIS2 Directive (EU) 2022/2555
+  jurisdiction: EU + Ukraine
+  review_cycle: quarterly
+  responsible: AuditorSEC Compliance Team
+  next_review: 2026-07-01
+
+audit:
+  logs_bucket: s3://auditorsec-ai-audit-logs
+  immutable: true
+  retention_days: 365
+  tool: n8n + make ai-audit-logs
