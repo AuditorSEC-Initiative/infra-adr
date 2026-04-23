@@ -1,0 +1,114 @@
+# Ollama Helm Values — Post-Quantum Deployment
+# Chart: otwld/ollama
+# ADR: ADR-0011 | Phase: UHIP-2A | Namespace: ollama-system
+# Deploy: helm install ollama otwld/ollama -f values-pq.yaml -n ollama-system
+
+replicaCount: 1
+
+image:
+  repository: ollama/ollama
+  tag: latest-pq
+  pullPolicy: IfNotPresent
+
+ollama:
+  models:
+    - mistral-nemo:pq
+  gpu:
+    enabled: true
+    type: nvidia
+    number: 1
+  # Post-quantum encryption for model data at rest
+  extraEnvs:
+    - name: OLLAMA_PQ_MODE
+      value: "true"
+    - name: OLLAMA_ENCRYPT_AT_REST
+      value: "true"
+    - name: OLLAMA_VAULT_ADDR
+      valueFrom:
+        secretKeyRef:
+          name: vault-secrets
+          key: VAULT_ADDR
+    - name: OLLAMA_VAULT_TOKEN
+      valueFrom:
+        secretKeyRef:
+          name: vault-secrets
+          key: VAULT_TOKEN
+
+resources:
+  requests:
+    memory: "8Gi"
+    cpu: "4"
+    nvidia.com/gpu: "1"
+  limits:
+    memory: "16Gi"
+    cpu: "8"
+    nvidia.com/gpu: "1"
+
+persistence:
+  enabled: true
+  storageClass: "-"
+  accessMode: ReadWriteOnce
+  size: 50Gi
+
+service:
+  type: ClusterIP
+  port: 11434
+
+ingress:
+  enabled: false
+  # Internal only — no external exposure
+
+networkPolicy:
+  enabled: true
+  # Deny all external egress (NIS2 Art.21.2a enforcement)
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ollama-system
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault
+
+monitoring:
+  enabled: true
+  # Grafana + Prometheus
+  serviceMonitor:
+    enabled: true
+    namespace: monitoring
+    labels:
+      release: kube-prometheus-stack
+  alerts:
+    gpuUtilizationThreshold: 90  # Alert if GPU util > 90%
+    throughputTarget: 120         # Target: 120 tokens/sec on RTX4090 equiv.
+
+vault:
+  integration: true
+  secretPath: secret/auditorsec/ollama
+  # Vault Agent Injector annotations
+  annotations:
+    vault.hashicorp.com/agent-inject: "true"
+    vault.hashicorp.com/role: "ollama-role"
+    vault.hashicorp.com/agent-inject-secret-config: "secret/auditorsec/ollama/config"
+
+argocd:
+  # ArgoCD AppProject: auditorsec-infra
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+
+# NIS2 / Security labels
+podLabels:
+  compliance: nis2-art21
+  data-classification: internal
+  adr: adr-0011
+  brave1: compatible
+
+podAnnotations:
+  auditorsec.io/pq-mode: "enabled"
+  auditorsec.io/adr: "ADR-0011"
+  auditorsec.io/nis2: "Art.21.2a,Art.21.2k"
