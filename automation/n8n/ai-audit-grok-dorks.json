@@ -1,0 +1,160 @@
+{
+  "name": "AuditorSEC AI Audit — Grok Dorks Monitor",
+  "description": "ADR-0011: Monitor grok.com/share for leaked AuditorSEC/Audityzer conversations. Cron trigger → Google dorks via Parsera → Grafana alert + S3 immutable log.",
+  "meta": {
+    "adr": "ADR-0011",
+    "phase": "UHIP-2A",
+    "nis2": "Art.21.2a",
+    "instanceId": "auditorsec-n8n-prod"
+  },
+  "nodes": [
+    {
+      "id": "1",
+      "name": "Cron Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "parameters": {
+        "rule": {
+          "interval": [{
+            "field": "cronExpression",
+            "expression": "0 */6 * * *"
+          }]
+        }
+      },
+      "position": [100, 200]
+    },
+    {
+      "id": "2",
+      "name": "Google Dork: auditorsec",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/customsearch/v1",
+        "queryParameters": {
+          "parameters": [
+            { "name": "key", "value": "={{ $env.GOOGLE_API_KEY }}" },
+            { "name": "cx", "value": "={{ $env.GOOGLE_CSE_ID }}" },
+            { "name": "q", "value": "auditorsec site:grok.com/share" }
+          ]
+        }
+      },
+      "position": [300, 150]
+    },
+    {
+      "id": "3",
+      "name": "Google Dork: audityzer",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "GET",
+        "url": "https://www.googleapis.com/customsearch/v1",
+        "queryParameters": {
+          "parameters": [
+            { "name": "key", "value": "={{ $env.GOOGLE_API_KEY }}" },
+            { "name": "cx", "value": "={{ $env.GOOGLE_CSE_ID }}" },
+            { "name": "q", "value": "audityzer site:grok.com/share" }
+          ]
+        }
+      },
+      "position": [300, 300]
+    },
+    {
+      "id": "4",
+      "name": "Merge Results",
+      "type": "n8n-nodes-base.merge",
+      "parameters": {
+        "mode": "append"
+      },
+      "position": [500, 225]
+    },
+    {
+      "id": "5",
+      "name": "Check for Results",
+      "type": "n8n-nodes-base.if",
+      "parameters": {
+        "conditions": {
+          "number": [{
+            "value1": "={{ $json.searchInformation.totalResults }}",
+            "operation": "larger",
+            "value2": 0
+          }]
+        }
+      },
+      "position": [700, 225]
+    },
+    {
+      "id": "6",
+      "name": "Grafana Alert",
+      "type": "n8n-nodes-base.httpRequest",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.GRAFANA_WEBHOOK_URL }}",
+        "jsonBody": {
+          "title": "[ALERT] AuditorSEC data found on grok.com/share",
+          "message": "=Dork results found: {{ $json.searchInformation.totalResults }} results. Query: {{ $json.queries.request[0].searchTerms }}. ADR-0011 violation detected.",
+          "severity": "critical",
+          "adr": "ADR-0011",
+          "nis2": "Art.21.2a"
+        }
+      },
+      "position": [900, 150]
+    },
+    {
+      "id": "7",
+      "name": "S3 Immutable Log",
+      "type": "n8n-nodes-base.awsS3",
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "auditorsec-ai-audit-logs",
+        "fileName": "=grok-dork-{{ $now.format('YYYY-MM-DD-HH-mm') }}.json",
+        "binaryData": false,
+        "fileContent": "={{ JSON.stringify($json, null, 2) }}"
+      },
+      "position": [900, 300]
+    },
+    {
+      "id": "8",
+      "name": "No Results — Log OK",
+      "type": "n8n-nodes-base.awsS3",
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "auditorsec-ai-audit-logs",
+        "fileName": "=grok-dork-ok-{{ $now.format('YYYY-MM-DD-HH-mm') }}.json",
+        "binaryData": false,
+        "fileContent": "={{ JSON.stringify({ status: 'OK', timestamp: $now, message: 'No AuditorSEC data found on grok.com/share' }) }}"
+      },
+      "position": [900, 400]
+    }
+  ],
+  "connections": {
+    "Cron Trigger": {
+      "main": [[{ "node": "Google Dork: auditorsec", "type": "main", "index": 0 }, { "node": "Google Dork: audityzer", "type": "main", "index": 0 }]]
+    },
+    "Google Dork: auditorsec": {
+      "main": [[{ "node": "Merge Results", "type": "main", "index": 0 }]]
+    },
+    "Google Dork: audityzer": {
+      "main": [[{ "node": "Merge Results", "type": "main", "index": 1 }]]
+    },
+    "Merge Results": {
+      "main": [[{ "node": "Check for Results", "type": "main", "index": 0 }]]
+    },
+    "Check for Results": {
+      "main": [
+        [{ "node": "Grafana Alert", "type": "main", "index": 0 }, { "node": "S3 Immutable Log", "type": "main", "index": 0 }],
+        [{ "node": "No Results — Log OK", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveManualExecutions": true,
+    "callerPolicy": "workflowsFromSameOwner"
+  },
+  "env_required": [
+    "GOOGLE_API_KEY",
+    "GOOGLE_CSE_ID",
+    "GRAFANA_WEBHOOK_URL",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_REGION"
+  ]
+}
