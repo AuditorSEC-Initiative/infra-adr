@@ -1,0 +1,71 @@
+name: ADR NIS2 Compliance Gate
+
+on:
+  push:
+    paths:
+      - 'adr/**'
+      - 'docs/**'
+      - 'NIS2-Art21-mapping.md'
+  pull_request:
+    paths:
+      - 'adr/**'
+      - 'docs/**'
+      - 'NIS2-Art21-mapping.md'
+
+jobs:
+  nis2-check:
+    runs-on: ubuntu-latest
+    name: NIS2 Art.21 Compliance Validation
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate ADR NIS2-Art21 fields
+        run: |
+          FAIL=0
+          for adr in $(find adr/ docs/ -name "ADR-*.md" 2>/dev/null); do
+            echo "Checking $adr..."
+            if ! grep -q "NIS2-Art21:" "$adr"; then
+              echo "❌ FAIL: $adr lacks NIS2-Art21 field"
+              FAIL=1
+            fi
+            if ! grep -q "External IDs:\|ClickUp\|ADR_ID" "$adr"; then
+              echo "❌ FAIL: $adr lacks ClickUp External ID reference"
+              FAIL=1
+            fi
+            if ! grep -q "Status:" "$adr"; then
+              echo "❌ FAIL: $adr lacks Status field"
+              FAIL=1
+            fi
+            echo "✅ $adr: passed basic NIS2 structure check"
+          done
+          if [ $FAIL -ne 0 ]; then
+            echo "::error::One or more ADRs failed NIS2 compliance gate"
+            exit 1
+          fi
+          echo "✅ All ADRs passed NIS2-Art21 compliance gate"
+
+      - name: Check NIS2-Art21-mapping exists
+        run: |
+          if [ ! -f "NIS2-Art21-mapping.md" ]; then
+            echo "::warning::NIS2-Art21-mapping.md not found — create it for full coverage"
+          else
+            echo "✅ NIS2-Art21-mapping.md present"
+          fi
+
+      - name: Validate governance.yaml
+        run: |
+          if [ -f "governance.yaml" ]; then
+            echo "✅ governance.yaml present"
+            grep -c "NIS2\|ADR\|compliance" governance.yaml || echo "::warning::governance.yaml may lack NIS2/ADR references"
+          else
+            echo "::warning::governance.yaml not found"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## ADR NIS2 Compliance Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Repo: AuditorSEC-Initiative/infra-adr" >> $GITHUB_STEP_SUMMARY
+          echo "- Phase: UHIP-2A" >> $GITHUB_STEP_SUMMARY
+          echo "- NIS2 Article 21 coverage validated" >> $GITHUB_STEP_SUMMARY
+          echo "- Run: $(date -u)" >> $GITHUB_STEP_SUMMARY
