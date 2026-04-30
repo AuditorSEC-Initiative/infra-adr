@@ -23,45 +23,35 @@ jobs:
       - name: Validate ADR NIS2-Art21 fields
         run: |
           FAIL=0
-          FILES=$(find adr/ docs/ -name "ADR-*.md" 2>/dev/null || true)
-          if [ -z "$FILES" ]; then
-            echo "::warning::No ADR-*.md files found in adr/ or docs/"
-            exit 0
-          fi
-          echo "$FILES" | while read adr; do
+          for adr in docs/ADR-*.md adr/ADR-*.md; do
+            [ -f "$adr" ] || continue
             echo "Checking $adr..."
             if ! grep -qi "NIS2-Art21" "$adr"; then
               echo "::error file=$adr::FAIL: $adr lacks NIS2-Art21 field"
-              exit 1
+              FAIL=1
             fi
-            if ! grep -qi "External.IDs\|ClickUp\|CU-ADR" "$adr"; then
-              echo "::error file=$adr::FAIL: $adr lacks ClickUp/External ID reference"
-              exit 1
+            if ! grep -qi "CU-ADR\|ClickUp" "$adr"; then
+              echo "::error file=$adr::FAIL: $adr lacks ClickUp/CU-ADR reference"
+              FAIL=1
             fi
             echo "✅ $adr: NIS2 compliance fields present"
           done
+          if [ $FAIL -ne 0 ]; then
+            echo "::error::One or more ADRs failed NIS2 compliance gate"
+            exit 1
+          fi
           echo "✅ All ADRs passed NIS2-Art21 compliance gate"
 
-      - name: Check NIS2-Art21-mapping exists
+      - name: Check NIS2-Art21-mapping
         run: |
-          if [ ! -f "NIS2-Art21-mapping.md" ]; then
-            echo "::warning::NIS2-Art21-mapping.md not found"
-          else
-            echo "✅ NIS2-Art21-mapping.md present"
-          fi
+          [ -f NIS2-Art21-mapping.md ] && echo "✅ mapping present" || echo "::warning::NIS2-Art21-mapping.md missing"
 
-      - name: Validate governance.yaml
+      - name: Check governance.yaml
         run: |
-          if [ -f "governance.yaml" ]; then
-            echo "✅ governance.yaml present"
-          else
-            echo "::warning::governance.yaml not found"
-          fi
+          [ -f governance.yaml ] && echo "✅ governance.yaml present" || echo "::warning::governance.yaml missing"
 
-      - name: Summary
+      - name: Step Summary
         run: |
-          echo "## ADR NIS2 Compliance Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## NIS2 ADR Gate | UHIP-2A | $(date -u)" >> $GITHUB_STEP_SUMMARY
           echo "- Repo: AuditorSEC-Initiative/infra-adr" >> $GITHUB_STEP_SUMMARY
-          echo "- Phase: UHIP-2A" >> $GITHUB_STEP_SUMMARY
-          echo "- NIS2 Article 21 coverage validated" >> $GITHUB_STEP_SUMMARY
-          echo "- Run: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "- All ADRs validated for NIS2-Art21 + ClickUp IDs" >> $GITHUB_STEP_SUMMARY
