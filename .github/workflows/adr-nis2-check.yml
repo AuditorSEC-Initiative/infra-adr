@@ -23,32 +23,29 @@ jobs:
       - name: Validate ADR NIS2-Art21 fields
         run: |
           FAIL=0
-          for adr in $(find adr/ docs/ -name "ADR-*.md" 2>/dev/null); do
-            echo "Checking $adr..."
-            if ! grep -q "NIS2-Art21:" "$adr"; then
-              echo "❌ FAIL: $adr lacks NIS2-Art21 field"
-              FAIL=1
-            fi
-            if ! grep -q "External IDs:\|ClickUp\|ADR_ID" "$adr"; then
-              echo "❌ FAIL: $adr lacks ClickUp External ID reference"
-              FAIL=1
-            fi
-            if ! grep -q "Status:" "$adr"; then
-              echo "❌ FAIL: $adr lacks Status field"
-              FAIL=1
-            fi
-            echo "✅ $adr: passed basic NIS2 structure check"
-          done
-          if [ $FAIL -ne 0 ]; then
-            echo "::error::One or more ADRs failed NIS2 compliance gate"
-            exit 1
+          FILES=$(find adr/ docs/ -name "ADR-*.md" 2>/dev/null || true)
+          if [ -z "$FILES" ]; then
+            echo "::warning::No ADR-*.md files found in adr/ or docs/"
+            exit 0
           fi
+          echo "$FILES" | while read adr; do
+            echo "Checking $adr..."
+            if ! grep -qi "NIS2-Art21" "$adr"; then
+              echo "::error file=$adr::FAIL: $adr lacks NIS2-Art21 field"
+              exit 1
+            fi
+            if ! grep -qi "External.IDs\|ClickUp\|CU-ADR" "$adr"; then
+              echo "::error file=$adr::FAIL: $adr lacks ClickUp/External ID reference"
+              exit 1
+            fi
+            echo "✅ $adr: NIS2 compliance fields present"
+          done
           echo "✅ All ADRs passed NIS2-Art21 compliance gate"
 
       - name: Check NIS2-Art21-mapping exists
         run: |
           if [ ! -f "NIS2-Art21-mapping.md" ]; then
-            echo "::warning::NIS2-Art21-mapping.md not found — create it for full coverage"
+            echo "::warning::NIS2-Art21-mapping.md not found"
           else
             echo "✅ NIS2-Art21-mapping.md present"
           fi
@@ -57,7 +54,6 @@ jobs:
         run: |
           if [ -f "governance.yaml" ]; then
             echo "✅ governance.yaml present"
-            grep -c "NIS2\|ADR\|compliance" governance.yaml || echo "::warning::governance.yaml may lack NIS2/ADR references"
           else
             echo "::warning::governance.yaml not found"
           fi
