@@ -103,3 +103,5 @@ Decision:     TBD — Multi-bot orchestration (Task Mgmt, Code Review,
 ---
 
 *Maintained by AuditorSEC-Initiative. Phase UHIP-2A. Auto-validated via GHA on every commit.*
+
+<!-- trigger: 2026-04-30 UHIP-2A re-validate -->
